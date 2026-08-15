@@ -1,462 +1,3755 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="uk">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>SmartLessa AR | WebXR & Hand Tracking Generator 2035</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#05070b">
+<meta name="description" content="SmartLessa AR Generator — створення навчальних AR-досвідів без програмування.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<title>SmartLessa AR Generator</title>
 
-    <!-- PWA Meta -->
-    <link rel="manifest" href="manifest.json">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#0a0a1a">
-    <meta name="description" content="Генератор AR-уроків SmartLessa з відстеженням жестів рук (MediaPipe + Three.js WebAR).">
+<style>
+:root{
+  --bg:#05070b;
+  --panel:rgba(13,18,25,.80);
+  --panel2:rgba(18,25,34,.88);
+  --line:rgba(190,214,226,.16);
+  --line2:rgba(77,238,210,.34);
+  --accent:#4deed2;
+  --accent2:#8ff8e6;
+  --violet:#8b7cff;
+  --text:#f4f8fa;
+  --muted:#91a0aa;
+  --good:#61f2b2;
+  --warn:#ffd166;
+  --bad:#ff6b86;
+  --shadow:0 30px 100px rgba(0,0,0,.50);
+  --radius:28px;
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-right:env(safe-area-inset-right,0px);
+  --safe-bottom:env(safe-area-inset-bottom,0px);
+  --safe-left:env(safe-area-inset-left,0px);
+}
 
-    <!-- Third-party CDN Libraries -->
-    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-    <!-- MediaPipe Hands & Camera Utils -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-    
-    <!-- Cloudflare Analytics -->
-    <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "64df0e53a7f64e188d3eb86c8918389d"}'></script>
+*{
+  box-sizing:border-box;
+  -webkit-tap-highlight-color:transparent;
+}
 
-    <style>
-        :root {
-            --bg: #0a0a1a;
-            --panel: rgba(10, 10, 26, 0.88);
-            --accent: #7c3aed;
-            --accent-light: #a78bfa;
-            --good: #34d399;
-            --warn: #fbbf24;
-            --bad: #fb7185;
-            --text: #ffffff;
-            --muted: rgba(167, 139, 250, 0.6);
-        }
+html,
+body{
+  margin:0;
+  width:100%;
+  min-height:100%;
+  background:var(--bg);
+  color:var(--text);
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
 
-        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-        body, html { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
-        
-        #video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; transform: scaleX(-1); }
-        #canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
+body{
+  overflow-x:hidden;
+  overscroll-behavior-x:none;
+}
 
-        .top-bar { position: absolute; top: max(16px, env(safe-area-inset-top)); left: 14px; right: 14px; display: flex; justify-content: space-between; z-index: 200; gap: 8px; }
-        .top-bar button { background: var(--panel); backdrop-filter: blur(10px); border: 1.5px solid var(--accent); color: var(--accent-light); padding: 8px 16px; border-radius: 40px; font-weight: bold; font-size: 13px; cursor: pointer; transition: transform 0.1s; }
-        .top-bar button:active { transform: scale(0.95); }
+button,
+input{
+  font:inherit;
+}
 
-        #setup-screen { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 999; color: #fff; padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom)); overflow-y: auto; }
-        #setup-screen .logo { font-size: 2.5rem; margin-bottom: 4px; }
-        #setup-screen h2 { background: linear-gradient(135deg, var(--accent), var(--accent-light)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 1.8rem; font-weight: 800; text-align: center; }
-        #setup-screen .author { color: var(--muted); font-size: 12px; margin-bottom: 12px; }
-        
-        .hint-box { background: rgba(124, 58, 237, 0.08); border: 1px solid rgba(124, 58, 237, 0.2); border-radius: 14px; padding: 14px; margin-bottom: 16px; width: 100%; max-width: 420px; text-align: left; font-size: 12px; line-height: 1.5; color: rgba(255,255,255,0.8); }
-        .hint-box b { color: var(--accent-light); }
-        
-        .toggle-box { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; font-size: 13px; color: var(--accent-light); }
-        .toggle-box input { accent-color: var(--accent); width: 18px; height: 18px; }
+button{
+  cursor:pointer;
+}
 
-        #media-url { background: rgba(124, 58, 237, 0.08); border: 2px solid rgba(124, 58, 237, 0.4); color: #fff; padding: 12px 18px; border-radius: 50px; width: 100%; max-width: 420px; font-size: 14px; outline: none; margin-bottom: 10px; }
-        #media-url:focus { border-color: var(--accent); }
+button:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+}
 
-        .setup-buttons { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-bottom: 14px; width: 100%; max-width: 420px; }
-        .setup-buttons button { flex: 1; min-width: 140px; background: rgba(124, 58, 237, 0.1); border: 1.5px solid rgba(124, 58, 237, 0.5); color: var(--accent-light); padding: 12px 18px; border-radius: 50px; font-weight: bold; font-size: 14px; cursor: pointer; }
-        .setup-buttons button.primary { background: linear-gradient(135deg, var(--accent), #5b21b6); border: none; color: #fff; }
+.hidden{
+  display:none!important;
+}
 
-        #upload-btn { background: rgba(124, 58, 237, 0.08); border: 2px dashed var(--accent); color: var(--accent-light); padding: 12px 28px; border-radius: 50px; font-weight: bold; font-size: 14px; cursor: pointer; margin-bottom: 8px; width: 100%; max-width: 420px; }
-        #upload-status { font-size: 13px; color: var(--warn); margin-bottom: 10px; min-height: 20px; text-align: center; }
+/* =========================================================
+   BACKGROUND
+========================================================= */
 
-        #qrcode-wrapper { margin-top: 10px; display: none; text-align: center; }
-        #qrcode-container { display: inline-block; padding: 14px; background: #fff; border-radius: 18px; box-shadow: 0 0 30px rgba(124, 58, 237, 0.3); }
-        #copy-link { margin-top: 10px; color: var(--accent-light); font-size: 13px; cursor: pointer; text-decoration: underline; }
+body:before{
+  content:"";
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  z-index:-2;
+  background:
+    radial-gradient(circle at 50% -10%,rgba(77,238,210,.11),transparent 34%),
+    radial-gradient(circle at 100% 45%,rgba(139,124,255,.09),transparent 30%),
+    linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px);
+  background-size:auto,auto,56px 56px,56px 56px;
+}
 
-        #loading { position: fixed; inset: 0; background: var(--bg); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; color: var(--accent-light); padding: 24px; }
-        #loading-title { font-size: 1.4rem; font-weight: bold; letter-spacing: .1em; margin-bottom: 24px; text-shadow: 0 0 16px var(--accent); }
-        .pbwrap { width: 100%; max-width: 280px; background: rgba(124, 58, 237, 0.12); border-radius: 4px; height: 6px; margin-top: 20px; overflow: hidden; }
-        .pb { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-light)); width: 0%; transition: width .3s ease; }
+body:after{
+  content:"";
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  z-index:-1;
+  background:
+    linear-gradient(
+      180deg,
+      transparent 0%,
+      rgba(5,7,11,.18) 60%,
+      rgba(5,7,11,.94) 100%
+    );
+}
 
-        #onboarding { position: absolute; bottom: max(20px, env(safe-area-inset-bottom)); left: 14px; right: 14px; z-index: 200; display: none; pointer-events: none; }
-        #step-card { background: var(--panel); backdrop-filter: blur(10px); border: 1.5px solid var(--accent); border-radius: 20px; padding: 12px 16px; display: flex; align-items: center; gap: 14px; }
-        #step-emoji { font-size: 36px; }
-        #step-title { font-size: 15px; font-weight: bold; color: #fff; }
-        #step-sub { font-size: 12px; color: var(--warn); }
+/* =========================================================
+   SETUP
+========================================================= */
 
-        #debug-info { position: absolute; top: max(70px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 150; background: rgba(0,0,0,0.85); color: var(--good); padding: 6px 16px; border-radius: 20px; font-size: 11px; font-family: monospace; display: none; pointer-events: none; border: 1px solid rgba(124,58,237,0.3); backdrop-filter: blur(8px); }
-        #debug-info .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+#setup{
+  min-height:100svh;
+  padding:
+    calc(28px + var(--safe-top))
+    max(18px,var(--safe-right))
+    calc(52px + var(--safe-bottom))
+    max(18px,var(--safe-left));
+  display:flex;
+  justify-content:center;
+  overflow:auto;
+}
 
-        #autoplay-overlay { position: fixed; inset: 0; background: rgba(10, 10, 26, 0.88); backdrop-filter: blur(10px); display: none; align-items: center; justify-content: center; z-index: 500; flex-direction: column; gap: 18px; }
-        #autoplay-overlay.visible { display: flex; }
-        #autoplay-btn { background: linear-gradient(135deg, var(--accent), #5b21b6); color: #fff; font-size: 18px; font-weight: bold; padding: 16px 36px; border-radius: 60px; border: none; cursor: pointer; }
-    </style>
+.wrap{
+  width:min(1080px,100%);
+}
+
+.brand{
+  text-align:left;
+  margin:8px 0 26px;
+  position:relative;
+  padding:10px 2px 18px;
+}
+
+.brand:after{
+  content:"";
+  position:absolute;
+  left:0;
+  bottom:0;
+  width:min(260px,55vw);
+  height:1px;
+  background:linear-gradient(90deg,var(--accent),transparent);
+}
+
+.logo{
+  width:58px;
+  height:58px;
+  margin-bottom:18px;
+  border:1px solid var(--line2);
+  border-radius:18px;
+  position:relative;
+  background:rgba(77,238,210,.05);
+  box-shadow:0 0 40px rgba(77,238,210,.12);
+}
+
+.logo:before,
+.logo:after{
+  content:"";
+  position:absolute;
+  border:1px solid var(--accent);
+  border-radius:50%;
+}
+
+.logo:before{
+  width:22px;
+  height:22px;
+  left:17px;
+  top:17px;
+}
+
+.logo:after{
+  width:7px;
+  height:7px;
+  left:25px;
+  top:25px;
+  background:var(--accent);
+  box-shadow:0 0 18px var(--accent);
+}
+
+.brand h1{
+  margin:0;
+  font-size:clamp(38px,7vw,72px);
+  letter-spacing:-.055em;
+  line-height:.96;
+  font-weight:800;
+}
+
+.brand p{
+  margin:15px 0 0;
+  color:var(--muted);
+  font-size:clamp(14px,2vw,16px);
+  max-width:700px;
+  line-height:1.6;
+}
+
+/* =========================================================
+   CARDS
+========================================================= */
+
+.card{
+  background:
+    linear-gradient(
+      145deg,
+      rgba(18,25,34,.84),
+      rgba(8,12,17,.74)
+    );
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:26px;
+  backdrop-filter:blur(22px);
+  -webkit-backdrop-filter:blur(22px);
+  box-shadow:var(--shadow);
+  margin-bottom:16px;
+  position:relative;
+  overflow:hidden;
+}
+
+.card:before{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:
+    linear-gradient(
+      110deg,
+      rgba(77,238,210,.045),
+      transparent 38%,
+      rgba(139,124,255,.035)
+    );
+}
+
+.card>*{
+  position:relative;
+}
+
+.card h2{
+  margin:0 0 7px;
+  font-size:20px;
+  letter-spacing:-.02em;
+}
+
+.sub{
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.55;
+}
+
+/* =========================================================
+   TYPES
+========================================================= */
+
+.types{
+  display:grid;
+  grid-template-columns:repeat(5,minmax(0,1fr));
+  gap:10px;
+  margin-top:18px;
+}
+
+.type{
+  min-height:142px;
+  border:1px solid var(--line);
+  background:rgba(255,255,255,.018);
+  border-radius:20px;
+  padding:17px;
+  text-align:left;
+  color:var(--text);
+  transition:
+    transform .2s ease,
+    border-color .2s ease,
+    background .2s ease;
+  position:relative;
+  overflow:hidden;
+}
+
+.type:before{
+  content:"";
+  position:absolute;
+  left:0;
+  right:0;
+  top:0;
+  height:2px;
+  background:transparent;
+}
+
+.type:hover{
+  border-color:rgba(77,238,210,.45);
+  transform:translateY(-3px);
+  background:rgba(77,238,210,.045);
+}
+
+.type:active{
+  transform:scale(.985);
+}
+
+.type.active{
+  border-color:var(--accent);
+  background:
+    linear-gradient(
+      145deg,
+      rgba(77,238,210,.10),
+      rgba(139,124,255,.06)
+    );
+}
+
+.type.active:before{
+  background:var(--accent);
+}
+
+.glyph{
+  display:flex;
+  width:38px;
+  height:38px;
+  border:1px solid var(--line2);
+  border-radius:12px;
+  align-items:center;
+  justify-content:center;
+  color:var(--accent);
+  font-size:12px;
+  font-weight:800;
+  letter-spacing:.04em;
+  background:rgba(77,238,210,.05);
+}
+
+.type b{
+  display:block;
+  margin-top:15px;
+  font-size:14px;
+}
+
+.type small{
+  display:block;
+  margin-top:5px;
+  color:var(--muted);
+  font-size:11px;
+  line-height:1.35;
+}
+
+/* =========================================================
+   INPUTS
+========================================================= */
+
+.field{
+  margin-top:17px;
+}
+
+.field label{
+  display:block;
+  font-weight:700;
+  margin-bottom:8px;
+  font-size:13px;
+}
+
+.url{
+  width:100%;
+  background:rgba(3,7,11,.72);
+  color:#fff;
+  border:1px solid var(--line);
+  border-radius:16px;
+  padding:14px;
+  min-height:48px;
+  outline:0;
+  transition:
+    border-color .18s,
+    box-shadow .18s;
+}
+
+.url:focus{
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px rgba(77,238,210,.09);
+}
+
+.upload{
+  width:100%;
+  min-height:54px;
+  border:1px dashed rgba(77,238,210,.55);
+  background:rgba(77,238,210,.045);
+  color:var(--accent2);
+  padding:17px 21px;
+  border-radius:17px;
+  font-weight:800;
+  transition:.2s;
+}
+
+.upload:hover{
+  background:rgba(77,238,210,.09);
+  border-color:var(--accent);
+}
+
+.upload:active{
+  transform:scale(.99);
+}
+
+.file-meta{
+  font-size:12px;
+  color:var(--muted);
+  margin-top:8px;
+  min-height:20px;
+  word-break:break-word;
+}
+
+.row{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
+.row>*{
+  flex:1;
+  min-width:190px;
+}
+
+.primary,
+.secondary{
+  min-height:50px;
+  padding:14px 18px;
+  border-radius:16px;
+  font-weight:800;
+  transition:.18s;
+}
+
+.primary{
+  border:1px solid rgba(77,238,210,.5);
+  background:var(--accent);
+  color:#03100e;
+}
+
+.secondary{
+  border:1px solid var(--line);
+  background:rgba(255,255,255,.025);
+  color:var(--text);
+}
+
+.demo{
+  background:rgba(139,124,255,.06);
+  border-color:rgba(139,124,255,.3);
+}
+
+.primary:hover,
+.secondary:hover{
+  transform:translateY(-1px);
+}
+
+.primary:active,
+.secondary:active{
+  transform:scale(.985);
+}
+
+.status{
+  min-height:22px;
+  margin-top:10px;
+  color:var(--warn);
+  font-size:12px;
+}
+
+.help{
+  font-size:11px;
+  color:var(--muted);
+  line-height:1.55;
+  margin-top:9px;
+}
+
+.check{
+  display:flex;
+  gap:9px;
+  align-items:center;
+  color:var(--muted);
+  font-size:12px;
+  margin-top:12px;
+  min-height:28px;
+}
+
+.check input{
+  accent-color:var(--accent);
+  width:17px;
+  height:17px;
+}
+
+.author{
+  margin-top:24px;
+  text-align:center;
+  color:rgba(145,160,170,.55);
+  font-size:10px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+
+/* =========================================================
+   QR
+========================================================= */
+
+#qr{
+  display:none;
+  text-align:center;
+  margin-top:18px;
+}
+
+.qrbox{
+  background:#fff;
+  display:inline-block;
+  padding:14px;
+  border-radius:18px;
+}
+
+.qrbox canvas,
+.qrbox img{
+  display:block;
+  max-width:100%;
+  height:auto;
+}
+
+.copy{
+  margin-top:10px;
+  color:var(--accent2);
+  text-decoration:underline;
+  background:none;
+  border:0;
+}
+
+.notice{
+  font-size:11px;
+  color:#7f8d97;
+  border-top:1px solid rgba(255,255,255,.08);
+  margin-top:17px;
+  padding-top:12px;
+  line-height:1.55;
+}
+
+/* =========================================================
+   AR
+========================================================= */
+
+#ar{
+  position:fixed;
+  inset:0;
+  width:100%;
+  height:100%;
+  overflow:hidden;
+  background:#000;
+  display:none;
+  touch-action:none;
+}
+
+#camera{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  background:#000;
+}
+
+#gl{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  pointer-events:none;
+}
+
+.top{
+  position:absolute;
+  z-index:30;
+  top:calc(12px + var(--safe-top));
+  left:calc(12px + var(--safe-left));
+  right:calc(12px + var(--safe-right));
+  display:flex;
+  justify-content:space-between;
+  gap:8px;
+  pointer-events:none;
+}
+
+.top .pill{
+  pointer-events:auto;
+}
+
+.pill{
+  background:rgba(4,8,12,.72);
+  color:#fff;
+  border:1px solid rgba(77,238,210,.28);
+  backdrop-filter:blur(14px);
+  -webkit-backdrop-filter:blur(14px);
+  border-radius:999px;
+  padding:10px 14px;
+  min-height:42px;
+  font-weight:700;
+}
+
+.pill:active{
+  transform:scale(.97);
+}
+
+#arStatus{
+  position:absolute;
+  z-index:25;
+  bottom:calc(18px + var(--safe-bottom));
+  left:50%;
+  transform:translateX(-50%);
+  background:rgba(4,8,12,.78);
+  border:1px solid rgba(77,238,210,.28);
+  border-radius:999px;
+  padding:9px 15px;
+  font-size:11px;
+  color:#ddd;
+  white-space:nowrap;
+  max-width:90vw;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  backdrop-filter:blur(14px);
+  -webkit-backdrop-filter:blur(14px);
+}
+
+#arStatus.ok{
+  color:var(--good);
+}
+
+#loading{
+  position:absolute;
+  inset:0;
+  z-index:50;
+  background:#05070b;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  padding:24px;
+}
+
+.loader{
+  width:min(420px,100%);
+}
+
+.loader h2{
+  margin:0 0 14px;
+}
+
+.bar{
+  height:5px;
+  background:#182029;
+  border-radius:99px;
+  overflow:hidden;
+}
+
+.bar>i{
+  display:block;
+  width:0;
+  height:100%;
+  background:var(--accent);
+  transition:.25s;
+}
+
+.loadtext{
+  color:var(--muted);
+  font-size:12px;
+  margin-top:12px;
+}
+
+#tap{
+  position:absolute;
+  z-index:40;
+  inset:0;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  background:rgba(0,0,0,.42);
+  padding:24px;
+}
+
+#tap button{
+  font-size:15px;
+  padding:15px 24px;
+  min-height:52px;
+  border-radius:999px;
+  border:1px solid rgba(77,238,210,.5);
+  background:var(--accent);
+  color:#03100e;
+  font-weight:800;
+}
+
+#domCard{
+  position:absolute;
+  z-index:25;
+  display:none;
+  left:50%;
+  top:50%;
+  transform:translate(-50%,-50%);
+  width:min(380px,84vw);
+  max-height:70svh;
+  overflow:auto;
+  background:rgba(5,9,13,.90);
+  border:1px solid rgba(77,238,210,.35);
+  backdrop-filter:blur(18px);
+  -webkit-backdrop-filter:blur(18px);
+  border-radius:24px;
+  padding:18px;
+  box-shadow:0 18px 60px rgba(0,0,0,.45);
+}
+
+#domCard h3{
+  margin:0 0 6px;
+  font-size:18px;
+}
+
+#domCard p{
+  margin:0 0 13px;
+  color:#aebbc2;
+  font-size:13px;
+  line-height:1.45;
+}
+
+#domCard .action{
+  width:100%;
+  min-height:48px;
+  border:0;
+  border-radius:14px;
+  padding:12px;
+  background:var(--accent);
+  color:#03100e;
+  font-weight:800;
+}
+
+.audioProgress{
+  width:100%;
+  accent-color:var(--accent);
+}
+
+.mediaLabel{
+  font-size:10px;
+  color:var(--accent);
+  margin-bottom:8px;
+  text-transform:uppercase;
+  letter-spacing:.12em;
+}
+
+#arImage,
+#arVideo,
+#arGif{
+  position:absolute;
+  z-index:12;
+  display:none;
+  width:auto;
+  height:auto;
+  max-width:min(72vw,720px);
+  max-height:52svh;
+  left:50%;
+  top:46%;
+  transform:translate(-50%,-50%);
+  border-radius:18px;
+  box-shadow:
+    0 0 0 1px rgba(77,238,210,.25),
+    0 25px 70px rgba(0,0,0,.35);
+  object-fit:contain;
+  pointer-events:none;
+  user-select:none;
+  -webkit-user-drag:none;
+}
+
+#arVideo{
+  background:transparent;
+}
+
+/* =========================================================
+   RESPONSIVE
+========================================================= */
+
+/* Large desktop */
+@media(min-width:1200px){
+  #setup{
+    padding-top:52px;
+  }
+
+  .card{
+    padding:30px;
+  }
+
+  .types{
+    gap:14px;
+  }
+
+  .type{
+    min-height:160px;
+  }
+}
+
+/* Tablet landscape / medium desktop */
+@media(max-width:1000px){
+  .types{
+    grid-template-columns:repeat(3,minmax(0,1fr));
+  }
+}
+
+/* Tablet */
+@media(max-width:700px){
+  #setup{
+    padding-top:24px;
+  }
+
+  .card{
+    padding:20px;
+    border-radius:24px;
+  }
+
+  .types{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+
+  .type{
+    min-height:126px;
+  }
+
+  .brand h1{
+    font-size:clamp(38px,10vw,52px);
+  }
+
+  .row>*{
+    min-width:100%;
+  }
+
+  #arImage,
+  #arVideo,
+  #arGif{
+    max-width:78vw;
+    max-height:46svh;
+  }
+}
+
+/* Phones */
+@media(max-width:480px){
+  #setup{
+    padding:
+      calc(18px + var(--safe-top))
+      max(12px,var(--safe-right))
+      calc(38px + var(--safe-bottom))
+      max(12px,var(--safe-left));
+  }
+
+  .brand{
+    margin-bottom:20px;
+  }
+
+  .brand h1{
+    font-size:40px;
+  }
+
+  .brand p{
+    font-size:13px;
+  }
+
+  .logo{
+    width:52px;
+    height:52px;
+    border-radius:16px;
+  }
+
+  .logo:before{
+    width:20px;
+    height:20px;
+    left:15px;
+    top:15px;
+  }
+
+  .logo:after{
+    width:6px;
+    height:6px;
+    left:22px;
+    top:22px;
+  }
+
+  .card{
+    padding:16px;
+    border-radius:22px;
+  }
+
+  .types{
+    gap:8px;
+  }
+
+  .type{
+    min-height:118px;
+    padding:14px;
+    border-radius:17px;
+  }
+
+  .glyph{
+    width:34px;
+    height:34px;
+    border-radius:10px;
+  }
+
+  .type b{
+    margin-top:11px;
+  }
+
+  .type small{
+    font-size:10px;
+  }
+
+  .primary,
+  .secondary,
+  .upload{
+    min-height:52px;
+  }
+
+  #arImage,
+  #arVideo,
+  #arGif{
+    max-width:84vw;
+    max-height:42svh;
+    border-radius:14px;
+  }
+
+  #domCard{
+    width:min(88vw,380px);
+  }
+}
+
+/* Very small phones */
+@media(max-width:360px){
+  .types{
+    grid-template-columns:1fr;
+  }
+
+  .type{
+    min-height:auto;
+  }
+
+  .brand h1{
+    font-size:36px;
+  }
+}
+
+/* Landscape phone */
+@media(max-height:520px) and (orientation:landscape){
+  #setup{
+    padding-top:14px;
+  }
+
+  .brand{
+    margin-bottom:14px;
+  }
+
+  .brand .logo{
+    display:none;
+  }
+
+  .brand h1{
+    font-size:34px;
+  }
+
+  .brand p{
+    margin-top:8px;
+  }
+
+  .card{
+    padding:15px;
+  }
+
+  #arImage,
+  #arVideo,
+  #arGif{
+    max-height:70svh;
+    max-width:62vw;
+  }
+
+  #domCard{
+    max-height:80svh;
+  }
+}
+
+/* Reduced motion */
+@media(prefers-reduced-motion:reduce){
+  *,
+  *:before,
+  *:after{
+    transition:none!important;
+    animation:none!important;
+  }
+}
+</style>
 </head>
+
 <body>
 
-<video id="video" autoplay playsinline muted></video>
-<canvas id="canvas"></canvas>
+<!-- =======================================================
+     SETUP / GENERATOR
+======================================================= -->
 
-<div class="top-bar" id="ar-tools" style="display: none;">
-    <button id="camera-toggle" aria-label="Перемкнути камеру">📷 Камера</button>
-    <button id="reset-btn" aria-label="Конструктор">⚙️ Конструктор</button>
-</div>
+<section id="setup">
 
-<div id="debug-info"><span class="status-dot" style="background: var(--warn);"></span>Ініціалізація AR...</div>
+<main class="wrap">
 
-<!-- Конструктор для вчителя -->
-<div id="setup-screen">
-    <div class="logo">✨</div>
-    <h2>AR Конструктор</h2>
-    <p class="author">Автор: <b>Олеся Бохонок | SmartLessa</b></p>
+<header class="brand">
+  <div class="logo" aria-hidden="true"></div>
+  <h1>AR Генератор</h1>
+  <p>
+    Створіть навчальний AR-досвід без програмування.
+    Відео, зображення, GIF, аудіо або посилання —
+    один генератор для різних гаджетів.
+  </p>
+</header>
 
-    <div class="hint-box">
-        <b>🖐️ Інтерактивне відстеження руки:</b><br>
-        • Завантажте відео (.mp4) або зображення.<br>
-        • Згенеруйте <b>QR-код чи посилання</b> для учнів.<br>
-        • Учні відкриють посилання, покажуть долоню перед камерою — голограма з'явиться прямо над їхньою долонею!
+<section class="card">
+
+  <h2>Що хочете додати в AR?</h2>
+
+  <div class="sub">
+    Оберіть тип матеріалу. Генератор сам підготує потрібний режим.
+  </div>
+
+  <div class="types" id="types">
+
+    <button class="type active" data-type="video" type="button">
+      <span class="glyph">01</span>
+      <b>Відео</b>
+      <small>MP4 · WebM · MOV</small>
+    </button>
+
+    <button class="type" data-type="image" type="button">
+      <span class="glyph">02</span>
+      <b>Зображення</b>
+      <small>JPG · PNG · WebP</small>
+    </button>
+
+    <button class="type" data-type="gif" type="button">
+      <span class="glyph">03</span>
+      <b>GIF</b>
+      <small>Анімоване зображення</small>
+    </button>
+
+    <button class="type" data-type="audio" type="button">
+      <span class="glyph">04</span>
+      <b>Аудіо</b>
+      <small>MP3 · WAV · OGG</small>
+    </button>
+
+    <button class="type" data-type="link" type="button">
+      <span class="glyph">05</span>
+      <b>Посилання</b>
+      <small>URL · вебконтент</small>
+    </button>
+
+  </div>
+
+</section>
+
+
+<section class="card">
+
+  <div id="filePanel">
+
+    <h2 id="inputTitle">Додайте відео</h2>
+
+    <div class="sub" id="inputHint">
+      Завантажте файл або вставте пряме HTTPS-посилання.
     </div>
 
-    <div class="toggle-box">
-        <input type="checkbox" id="chromakey-toggle" checked>
-        <label for="chromakey-toggle">Видалити зелений екран (ChromaKey)</label>
+    <div class="field">
+
+      <input
+        id="fileInput"
+        class="hidden"
+        type="file"
+      >
+
+      <button
+        id="uploadBtn"
+        class="upload"
+        type="button"
+      >
+        Обрати файл з пристрою
+      </button>
+
+      <div
+        id="fileMeta"
+        class="file-meta"
+        aria-live="polite"
+      ></div>
+
     </div>
 
-    <input type="url" id="media-url" placeholder="🔗 Пряме HTTPS-посилання (.mp4, .png)" aria-label="Посилання на медіа" />
-    <input type="file" id="media-file-input" accept="video/mp4,image/jpeg,image/png" style="display:none;" />
-    <button id="upload-btn">📤 Обрати файл з пристрою</button>
-    <p id="upload-status" role="status" aria-live="polite"></p>
+  </div>
 
-    <div class="setup-buttons">
-        <button id="go-ar-btn" class="primary">✨ Запустити AR</button>
-        <button id="show-qr-btn">📱 Показати QR</button>
+
+  <div class="field">
+
+    <label for="urlInput">
+      Пряме посилання
+    </label>
+
+    <input
+      id="urlInput"
+      class="url"
+      type="url"
+      inputmode="url"
+      autocomplete="off"
+      autocapitalize="none"
+      spellcheck="false"
+      placeholder="https://..."
+    >
+
+    <div
+      class="help"
+      id="urlHelp"
+    >
+      Для файлу потрібне пряме HTTPS-посилання на ресурс.
     </div>
 
-    <div id="qrcode-wrapper">
-        <div id="qrcode-container"></div>
-        <div id="copy-link">📋 Скопіювати AR-посилання для учнів</div>
+  </div>
+
+
+  <label
+    class="check"
+    id="chromaRow"
+  >
+    <input
+      id="chroma"
+      type="checkbox"
+      checked
+    >
+    Видаляти зелений фон у відео
+  </label>
+
+
+  <div
+    class="status"
+    id="status"
+    role="status"
+    aria-live="polite"
+  ></div>
+
+
+  <div
+    class="row"
+    style="margin-top:14px"
+  >
+
+    <button
+      id="demoBtn"
+      class="secondary demo"
+      type="button"
+    >
+      Спробувати готовий приклад
+    </button>
+
+    <button
+      id="makeBtn"
+      class="primary"
+      type="button"
+    >
+      Створити AR
+    </button>
+
+  </div>
+
+
+  <div id="qr">
+
+    <div
+      class="qrbox"
+      id="qrBox"
+    ></div>
+
+    <div>
+      <button
+        id="copyBtn"
+        class="copy"
+        type="button"
+      >
+        Скопіювати AR-посилання
+      </button>
     </div>
-</div>
 
-<div id="loading">
-    <div id="loading-title">✨ SmartLessa AR</div>
-    <div id="loading-text" style="font-size: 13px;">Завантаження MediaPipe Hand Tracking...</div>
-    <div class="pbwrap"><div class="pb" id="pb"></div></div>
-</div>
+  </div>
 
-<div id="onboarding">
-    <div id="step-card">
-        <div id="step-emoji">🖐️</div>
-        <div>
-            <div id="step-title">Покажіть долоню перед камерою</div>
-            <div id="step-sub">Голограма прив'яжеться до вашої руки</div>
-        </div>
+
+  <div class="notice">
+
+    AR-посилання можна відкрити на смартфоні, планшеті або іншому
+    пристрої з камерою. Файли, завантажені через Worker, мають бути
+    доступні за публічним HTTPS-посиланням.
+
+  </div>
+
+</section>
+
+
+<p class="author">
+  Автор Олеся Бохонок 2026 / SmartLessa
+</p>
+
+</main>
+
+</section>
+
+
+<!-- =======================================================
+     AR EXPERIENCE
+======================================================= -->
+
+<section
+  id="ar"
+  aria-label="AR режим"
+>
+
+  <video
+    id="camera"
+    autoplay
+    playsinline
+    muted
+  ></video>
+
+  <canvas
+    id="gl"
+  ></canvas>
+
+
+  <div class="top">
+
+    <button
+      id="switchCam"
+      class="pill"
+      type="button"
+    >
+      Камера
+    </button>
+
+    <button
+      id="exitAr"
+      class="pill"
+      type="button"
+    >
+      Назад
+    </button>
+
+  </div>
+
+
+  <img
+    id="arImage"
+    alt="AR-зображення"
+    draggable="false"
+  >
+
+  <img
+    id="arGif"
+    alt="AR-анімація"
+    draggable="false"
+  >
+
+  <video
+    id="arVideo"
+    playsinline
+    muted
+    loop
+  ></video>
+
+
+  <div id="domCard"></div>
+
+
+  <div id="arStatus">
+    Підготовка AR…
+  </div>
+
+
+  <div id="tap">
+
+    <button
+      id="tapBtn"
+      type="button"
+    >
+      Запустити
+    </button>
+
+  </div>
+
+
+  <div id="loading">
+
+    <div class="loader">
+
+      <h2>
+        Готуємо AR
+      </h2>
+
+      <div class="bar">
+        <i id="loadBar"></i>
+      </div>
+
+      <div
+        class="loadtext"
+        id="loadText"
+      >
+        Підготовка…
+      </div>
+
     </div>
-</div>
 
-<div id="autoplay-overlay">
-    <div style="color: #fff; font-size: 18px; text-align: center;">✨ AR Готова до демонстрації!<br>Торкніться для запуску звуку</div>
-    <button id="autoplay-btn">▶ ЗАПУСТИТИ</button>
-</div>
+  </div>
+
+</section>
+
+
+<!-- =======================================================
+     QR
+======================================================= -->
+
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+
+
+<!-- =======================================================
+     MAIN APPLICATION
+======================================================= -->
 
 <script type="module">
-import * as THREE from 'https://unpkg.com/three@0.158.0/build/three.module.js';
 
-const WORKER_URL = 'https://ar-videoo.23lessa32.workers.dev';
+import * as THREE from
+  'https://unpkg.com/three@0.158.0/build/three.module.js';
 
-function sanitizeUrl(str) {
-    if (!str || typeof str !== 'string') return '';
-    try { const u = new URL(str.trim(), window.location.href); return (u.protocol === 'http:' || u.protocol === 'https:') ? u.href : ''; } catch { return ''; }
-}
 
-function getParams() {
-    const p = new URLSearchParams(window.location.search);
-    return { 
-        src: sanitizeUrl(p.get('src') || p.get('video')), 
-        chroma: p.get('chroma') !== '0'
-    };
-}
-const queryParams = getParams();
+/* =========================================================
+   CONFIGURATION
+========================================================= */
 
-// --- Вчительський режим (Генерація коду та посилань) ---
-if (!queryParams.src) {
-    document.getElementById('setup-screen').style.display = 'flex';
-    const mediaUrl = document.getElementById('media-url');
-    const uploadBtn = document.getElementById('upload-btn');
-    const fileInput = document.getElementById('media-file-input');
-    const uploadStatus = document.getElementById('upload-status');
-    const qrWrapper = document.getElementById('qrcode-wrapper');
-    const qrContainer = document.getElementById('qrcode-container');
-    const copyLink = document.getElementById('copy-link');
-    const chromaToggle = document.getElementById('chromakey-toggle');
-    let currentLink = '';
+const CONFIG = {
 
-    uploadBtn.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        if (file.size > 50 * 1024 * 1024) { uploadStatus.textContent = '❌ Файл понад 50 МБ'; return; }
-        uploadStatus.textContent = '⏳ Завантаження на сервер...';
-        
-        const fd = new FormData();
-        fd.append('file', file);
-        const xhr = new XMLHttpRequest();
-        xhr.upload.onprogress = (ev) => { if(ev.lengthComputable) uploadStatus.textContent = `⏳ Завантаження: ${Math.round((ev.loaded/ev.total)*100)}%`; };
-        xhr.onload = () => {
-            try {
-                const res = JSON.parse(xhr.responseText);
-                if (res.url) {
-                    mediaUrl.value = res.url;
-                    uploadStatus.textContent = '✅ Файл завантажено успішно!';
-                } else uploadStatus.textContent = '❌ Помилка сервера';
-            } catch { uploadStatus.textContent = '❌ Помилка завантаження'; }
-        };
-        xhr.onerror = () => { uploadStatus.textContent = '❌ Помилка мережі'; };
-        xhr.open('POST', WORKER_URL);
-        xhr.send(fd);
-    });
+  workerUrl:
+    'https://ar-videoo.23lessa32.workers.dev',
 
-    function buildARLink() {
-        const u = sanitizeUrl(mediaUrl.value);
-        if (!u) return '';
-        return `${window.location.origin}${window.location.pathname}?src=${encodeURIComponent(u)}&chroma=${chromaToggle.checked ? '1' : '0'}`;
+  maxFileBytes:
+    50 * 1024 * 1024,
+
+  maxVideoSeconds:
+    65,
+
+  types: {
+
+    video: {
+      label:'Відео',
+      ext:['mp4','webm','mov'],
+      accept:
+        'video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov'
+    },
+
+    image: {
+      label:'Зображення',
+      ext:['jpg','jpeg','png','webp'],
+      accept:
+        'image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp'
+    },
+
+    gif: {
+      label:'GIF',
+      ext:['gif'],
+      accept:
+        'image/gif,.gif'
+    },
+
+    audio: {
+      label:'Аудіо',
+      ext:['mp3','wav','ogg'],
+      accept:
+        'audio/mpeg,audio/wav,audio/ogg,.mp3,.wav,.ogg'
     }
 
-    document.getElementById('go-ar-btn').addEventListener('click', () => {
-        const link = buildARLink();
-        if (!link) { alert('Вкажіть посилання або завантажте файл!'); return; }
-        window.location.href = link;
+  }
+
+};
+
+
+/* =========================================================
+   DOM
+========================================================= */
+
+const $ = id =>
+  document.getElementById(id);
+
+const setup =
+  $('setup');
+
+const ar =
+  $('ar');
+
+const fileInput =
+  $('fileInput');
+
+const urlInput =
+  $('urlInput');
+
+const status =
+  $('status');
+
+const fileMeta =
+  $('fileMeta');
+
+const camera =
+  $('camera');
+
+const gl =
+  $('gl');
+
+const arStatus =
+  $('arStatus');
+
+const loading =
+  $('loading');
+
+const loadBar =
+  $('loadBar');
+
+const loadText =
+  $('loadText');
+
+const tap =
+  $('tap');
+
+const tapBtn =
+  $('tapBtn');
+
+const domCard =
+  $('domCard');
+
+const arImage =
+  $('arImage');
+
+const arGif =
+  $('arGif');
+
+const arVideo =
+  $('arVideo');
+
+
+/* =========================================================
+   STATE
+========================================================= */
+
+let selectedType =
+  'video';
+
+let selectedFile =
+  null;
+
+let currentUrl =
+  '';
+
+let qrUrl =
+  '';
+
+let facingMode =
+  'environment';
+
+let mediaStream =
+  null;
+
+let scene =
+  null;
+
+let cam3 =
+  null;
+
+let renderer =
+  null;
+
+let particles =
+  null;
+
+let handLandmarker =
+  null;
+
+let lastDetect =
+  0;
+
+let stable =
+  0;
+
+let animationId =
+  0;
+
+let gestureReady =
+  false;
+
+let arActiveType =
+  '';
+
+let arSrc =
+  '';
+
+let arChroma =
+  true;
+
+let arContentVisible =
+  false;
+
+let mediaReady =
+  false;
+
+
+/* =========================================================
+   HELPERS
+========================================================= */
+
+function esc(value){
+
+  return String(value ?? '')
+    .replace(/[&<>'"]/g, c => ({
+      '&':'&amp;',
+      '<':'&lt;',
+      '>':'&gt;',
+      "'":'&#39;',
+      '"':'&quot;'
+    }[c]));
+
+}
+
+
+function cleanUrl(value){
+
+  try{
+
+    const u =
+      new URL(String(value || '').trim());
+
+    return /^https?:$/.test(u.protocol)
+      ? u.href
+      : '';
+
+  }catch{
+
+    return '';
+
+  }
+
+}
+
+
+function ext(name){
+
+  const m =
+    String(name || '')
+      .toLowerCase()
+      .match(/\.([a-z0-9]+)$/);
+
+  return m
+    ? m[1]
+    : '';
+
+}
+
+
+function setStatus(
+  message,
+  type='warn'
+){
+
+  status.textContent =
+    message;
+
+  status.style.color =
+    type === 'good'
+      ? '#34d399'
+      : type === 'bad'
+        ? '#fb7185'
+        : '#fbbf24';
+
+}
+
+
+function statusAr(
+  message,
+  good=false
+){
+
+  arStatus.textContent =
+    message;
+
+  arStatus.classList.toggle(
+    'ok',
+    good
+  );
+
+}
+
+
+function setLoad(
+  value,
+  text
+){
+
+  loadBar.style.width =
+    Math.max(
+      0,
+      Math.min(
+        100,
+        value
+      )
+    ) + '%';
+
+  loadText.textContent =
+    text;
+
+}
+
+
+function isTouchDevice(){
+
+  return (
+    'ontouchstart' in window ||
+    navigator.maxTouchPoints > 0
+  );
+
+}
+
+
+/* =========================================================
+   TYPE SELECTION
+========================================================= */
+
+function setSelectedType(type){
+
+  selectedType =
+    type;
+
+  document
+    .querySelectorAll('.type')
+    .forEach(button => {
+
+      button.classList.toggle(
+        'active',
+        button.dataset.type === type
+      );
+
     });
 
-    document.getElementById('show-qr-btn').addEventListener('click', () => {
-        const link = buildARLink();
-        if (!link) { alert('Спочатку додайте медіафайл!'); return; }
-        qrContainer.innerHTML = '';
-        new QRCode(qrContainer, { text: link, width: 180, height: 180 });
-        qrWrapper.style.display = 'block';
-        currentLink = link;
-    });
+  selectedFile =
+    null;
 
-    copyLink.addEventListener('click', () => {
-        if (currentLink && navigator.clipboard) {
-            navigator.clipboard.writeText(currentLink).then(() => alert('AR-посилання скопійовано! Відправте його учням.'));
+  fileInput.value =
+    '';
+
+  fileMeta.textContent =
+    '';
+
+  urlInput.value =
+    '';
+
+  setStatus('');
+
+  const config =
+    CONFIG.types[type];
+
+  const titles = {
+
+    video:'Додайте відео',
+
+    image:'Додайте зображення',
+
+    gif:'Додайте GIF',
+
+    audio:'Додайте аудіо',
+
+    link:'Додайте посилання'
+
+  };
+
+  $('inputTitle').textContent =
+    titles[type];
+
+  $('inputHint').textContent =
+    type === 'link'
+
+      ? 'Вставте HTTPS-посилання на навчальний ресурс.'
+
+      : 'Завантажте файл або вставте пряме HTTPS-посилання.';
+
+  $('urlHelp').textContent =
+    type === 'link'
+
+      ? 'Можна вставити адресу Google Sites, форми, сайту або іншого вебресурсу.'
+
+      : 'Для файлу потрібне пряме HTTPS-посилання на ресурс.';
+
+  $('filePanel')
+    .classList.toggle(
+      'hidden',
+      type === 'link'
+    );
+
+  $('chromaRow')
+    .classList.toggle(
+      'hidden',
+      type !== 'video'
+    );
+
+  fileInput.accept =
+    config?.accept || '';
+
+}
+
+
+/* =========================================================
+   TYPE EVENTS
+========================================================= */
+
+document
+  .querySelectorAll('.type')
+  .forEach(button => {
+
+    button.addEventListener(
+      'click',
+      () =>
+        setSelectedType(
+          button.dataset.type
+        )
+    );
+
+  });
+
+
+/* =========================================================
+   FILE PICKER
+========================================================= */
+
+$('uploadBtn')
+  .addEventListener(
+    'click',
+    () => fileInput.click()
+  );
+
+
+fileInput
+  .addEventListener(
+    'change',
+    () => {
+
+      selectedFile =
+        fileInput.files?.[0] || null;
+
+      if(!selectedFile)
+        return;
+
+      const config =
+        CONFIG.types[selectedType];
+
+      const extension =
+        ext(selectedFile.name);
+
+      if(
+        !config ||
+        !config.ext.includes(extension)
+      ){
+
+        selectedFile =
+          null;
+
+        fileInput.value =
+          '';
+
+        setStatus(
+          'Для цього типу виберіть підтримуваний формат.',
+          'bad'
+        );
+
+        return;
+
+      }
+
+
+      if(
+        selectedFile.size >
+        CONFIG.maxFileBytes
+      ){
+
+        selectedFile =
+          null;
+
+        fileInput.value =
+          '';
+
+        setStatus(
+          'Файл перевищує 50 МБ.',
+          'bad'
+        );
+
+        return;
+
+      }
+
+
+      fileMeta.textContent =
+        `${selectedFile.name} · ${
+          (
+            selectedFile.size /
+            1024 /
+            1024
+          ).toFixed(1)
+        } МБ`;
+
+      setStatus(
+        'Файл готовий до завантаження',
+        'good'
+      );
+
+    }
+  );
+
+
+/* =========================================================
+   VIDEO VALIDATION
+========================================================= */
+
+async function validateLocalFile(
+  file,
+  type
+){
+
+  if(type !== 'video')
+    return true;
+
+
+  return new Promise(resolve => {
+
+    const objectUrl =
+      URL.createObjectURL(file);
+
+    const video =
+      document.createElement('video');
+
+    let done =
+      false;
+
+
+    const finish =
+      ok => {
+
+        if(done)
+          return;
+
+        done =
+          true;
+
+        URL.revokeObjectURL(
+          objectUrl
+        );
+
+        resolve(ok);
+
+      };
+
+
+    video.preload =
+      'metadata';
+
+
+    video.onloadedmetadata =
+      () => {
+
+        if(
+          Number.isFinite(video.duration) &&
+          video.duration >
+          CONFIG.maxVideoSeconds
+        ){
+
+          setStatus(
+            'Відео довше 65 секунд.',
+            'bad'
+          );
+
+          finish(false);
+
+        }else{
+
+          finish(true);
+
         }
-    });
 
-    throw new Error('SETUP_MODE');
+      };
+
+
+    video.onerror =
+      () => {
+
+        setStatus(
+          'Не вдалося прочитати тривалість відео. Файл буде перевірено Worker.'
+        );
+
+        finish(true);
+
+      };
+
+
+    video.src =
+      objectUrl;
+
+  });
+
 }
 
-// --- AR Runtime & MediaPipe Hand Tracking ---
-document.getElementById('setup-screen').style.display = 'none';
-document.getElementById('ar-tools').style.display = 'flex';
-document.getElementById('onboarding').style.display = 'block';
-const debugInfo = document.getElementById('debug-info');
-debugInfo.style.display = 'block';
 
-const loadingEl = document.getElementById('loading');
-const pb = document.getElementById('pb');
-loadingEl.style.display = 'flex';
-pb.style.width = '20%';
+/* =========================================================
+   UPLOAD
+========================================================= */
 
-let scene, camera, renderer, arMesh, videoElement, mediaTexture;
-let handTrackingActive = false;
-let currentFacingMode = 'environment';
-let cameraUtilsInstance = null;
+async function uploadFile(
+  file,
+  type
+){
 
-function initThree() {
-    const canvas = document.getElementById('canvas');
-    scene = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 100);
-    camera.position.z = 2;
+  if(!CONFIG.workerUrl){
 
-    renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    setStatus(
+      'Worker URL не налаштований. Вставте пряме посилання.',
+      'bad'
+    );
 
-    window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-    });
+    return '';
+
+  }
+
+
+  if(
+    !(await validateLocalFile(
+      file,
+      type
+    ))
+  )
+    return '';
+
+
+  setStatus(
+    'Завантаження…'
+  );
+
+
+  return new Promise(resolve => {
+
+    const xhr =
+      new XMLHttpRequest();
+
+    const form =
+      new FormData();
+
+
+    form.append(
+      'file',
+      file
+    );
+
+
+    xhr.open(
+      'POST',
+      CONFIG.workerUrl
+    );
+
+    xhr.timeout =
+      120000;
+
+
+    xhr.upload.onprogress =
+      event => {
+
+        if(event.lengthComputable){
+
+          setStatus(
+            `Завантаження: ${
+              Math.round(
+                event.loaded /
+                event.total *
+                100
+              )
+            }%`
+          );
+
+        }
+
+      };
+
+
+    xhr.onload =
+      () => {
+
+        try{
+
+          const data =
+            JSON.parse(
+              xhr.responseText ||
+              '{}'
+            );
+
+          const url =
+            cleanUrl(data.url);
+
+
+          if(url){
+
+            setStatus(
+              'Файл завантажено',
+              'good'
+            );
+
+            resolve(url);
+
+          }else{
+
+            setStatus(
+              `Worker не повернув URL (${xhr.status}).`,
+              'bad'
+            );
+
+            resolve('');
+
+          }
+
+        }catch{
+
+          setStatus(
+            'Worker повернув некоректну відповідь.',
+            'bad'
+          );
+
+          resolve('');
+
+        }
+
+      };
+
+
+    xhr.onerror =
+      () => {
+
+        setStatus(
+          'Помилка мережі під час завантаження.',
+          'bad'
+        );
+
+        resolve('');
+
+      };
+
+
+    xhr.ontimeout =
+      () => {
+
+        setStatus(
+          'Завантаження перевищило час очікування.',
+          'bad'
+        );
+
+        resolve('');
+
+      };
+
+
+    xhr.send(form);
+
+  });
+
 }
 
-function createChromaShaderMaterial(texture) {
-    return new THREE.ShaderMaterial({
-        uniforms: {
-            tex: { value: texture },
-            keyColor: { value: new THREE.Color(0x00ff00) },
-            similarity: { value: 0.38 },
-            smoothness: { value: 0.08 }
-        },
-        vertexShader: `
-            varying vec2 vUv;
-            void main() {
-                vUv = uv;
-                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+
+/* =========================================================
+   AR LINK
+========================================================= */
+
+function buildLink(
+  type,
+  url
+){
+
+  const clean =
+    cleanUrl(url);
+
+  if(!clean)
+    return '';
+
+
+  const params =
+    new URLSearchParams({
+
+      type,
+      src:clean
+
+    });
+
+
+  if(type === 'video'){
+
+    params.set(
+      'chroma',
+      $('chroma').checked
+        ? '1'
+        : '0'
+    );
+
+  }
+
+
+  return (
+    `${location.origin}${location.pathname}?${params.toString()}`
+  );
+
+}
+
+
+/* =========================================================
+   QR
+========================================================= */
+
+function makeQr(url){
+
+  $('qrBox').innerHTML =
+    '';
+
+  $('qr').style.display =
+    'block';
+
+  qrUrl =
+    url;
+
+
+  if(
+    typeof QRCode !==
+    'function'
+  ){
+
+    setStatus(
+      'QR-бібліотека не завантажилася. AR-посилання вже готове.'
+    );
+
+    return;
+
+  }
+
+
+  try{
+
+    new QRCode(
+      $('qrBox'),
+      {
+        text:url,
+        width:190,
+        height:190,
+        colorDark:'#09091a',
+        colorLight:'#fff'
+      }
+    );
+
+  }catch{
+
+    setStatus(
+      'Не вдалося створити QR. AR-посилання вже готове.',
+      'bad'
+    );
+
+  }
+
+}
+
+
+/* =========================================================
+   COPY LINK
+========================================================= */
+
+$('copyBtn')
+  .addEventListener(
+    'click',
+    async () => {
+
+      if(!qrUrl)
+        return;
+
+
+      try{
+
+        await navigator
+          .clipboard
+          .writeText(qrUrl);
+
+        setStatus(
+          'AR-посилання скопійовано',
+          'good'
+        );
+
+      }catch{
+
+        window.prompt(
+          'Скопіюйте AR-посилання:',
+          qrUrl
+        );
+
+      }
+
+    }
+  );
+
+
+/* =========================================================
+   RESOURCE PREPARATION
+========================================================= */
+
+async function prepareResource(){
+
+  let url =
+    cleanUrl(
+      urlInput.value
+    );
+
+
+  if(selectedFile){
+
+    url =
+      await uploadFile(
+        selectedFile,
+        selectedType
+      );
+
+    if(!url)
+      return '';
+
+  }
+
+
+  if(!url){
+
+    setStatus(
+      selectedType === 'link'
+
+        ? 'Вставте HTTPS-посилання.'
+
+        : 'Оберіть файл або вставте HTTPS-посилання.',
+
+      'bad'
+    );
+
+    return '';
+
+  }
+
+
+  currentUrl =
+    url;
+
+  return url;
+
+}
+
+
+/* =========================================================
+   CREATE AR
+========================================================= */
+
+$('makeBtn')
+  .addEventListener(
+    'click',
+    async () => {
+
+      const url =
+        await prepareResource();
+
+      if(!url)
+        return;
+
+
+      const link =
+        buildLink(
+          selectedType,
+          url
+        );
+
+
+      if(!link){
+
+        setStatus(
+          'Некоректне посилання.',
+          'bad'
+        );
+
+        return;
+
+      }
+
+
+      makeQr(link);
+
+
+      /*
+       * На десктопі також запускаємо AR одразу.
+       * На мобільному deep-link поводиться так само.
+       */
+
+      history.pushState(
+        {},
+        '',
+        link
+      );
+
+      startAR(
+        selectedType,
+        url,
+        $('chroma').checked
+      );
+
+    }
+  );
+
+
+/* =========================================================
+   DEMO
+========================================================= */
+
+$('demoBtn')
+  .addEventListener(
+    'click',
+    () => {
+
+      setSelectedType(
+        'image'
+      );
+
+
+      const demo =
+        'https://images.unsplash.com/photo-1531058020387-3be344556be6?auto=format&fit=crop&w=1200&q=80';
+
+
+      urlInput.value =
+        demo;
+
+
+      setStatus(
+        'Готовий приклад завантажено. Натисніть «Створити AR».',
+        'good'
+      );
+
+    }
+  );
+
+
+/* =========================================================
+   MEDIA RESET
+========================================================= */
+
+function clearMedia(){
+
+  [
+    arImage,
+    arGif,
+    arVideo
+  ].forEach(
+    element => {
+
+      element.style.display =
+        'none';
+
+
+      if(
+        element.tagName ===
+        'VIDEO'
+      ){
+
+        try{
+          element.pause();
+        }catch{}
+
+
+        element.removeAttribute(
+          'src'
+        );
+
+        element.load();
+
+      }
+
+    }
+  );
+
+
+  domCard.style.display =
+    'none';
+
+  domCard.innerHTML =
+    '';
+
+  arContentVisible =
+    false;
+
+  mediaReady =
+    false;
+
+}
+
+
+/* =========================================================
+   MEDIA SETUP
+========================================================= */
+
+function setupMedia(
+  type,
+  src,
+  chroma
+){
+
+  clearMedia();
+
+
+  arActiveType =
+    type;
+
+  arSrc =
+    src;
+
+  arChroma =
+    chroma;
+
+
+  if(type === 'image'){
+
+    arImage.src =
+      src;
+
+    arImage.style.display =
+      'block';
+
+
+    arImage.onload =
+      () => {
+
+        mediaReady =
+          true;
+
+        statusAr(
+          'Зображення готове — покажіть руку',
+          true
+        );
+
+      };
+
+
+    arImage.onerror =
+      () => {
+
+        statusAr(
+          'Зображення не вдалося завантажити'
+        );
+
+      };
+
+  }
+
+
+  else if(type === 'gif'){
+
+    arGif.src =
+      src;
+
+    arGif.style.display =
+      'block';
+
+
+    arGif.onload =
+      () => {
+
+        mediaReady =
+          true;
+
+        statusAr(
+          'GIF готовий — покажіть руку',
+          true
+        );
+
+      };
+
+
+    arGif.onerror =
+      () => {
+
+        statusAr(
+          'GIF не вдалося завантажити'
+        );
+
+      };
+
+  }
+
+
+  else if(type === 'video'){
+
+    arVideo.src =
+      src;
+
+    arVideo.muted =
+      true;
+
+    arVideo.loop =
+      true;
+
+    arVideo.crossOrigin =
+      'anonymous';
+
+    arVideo.playsInline =
+      true;
+
+    arVideo.load();
+
+
+    arVideo.oncanplay =
+      () => {
+
+        mediaReady =
+          true;
+
+        statusAr(
+          'Відео готове — покажіть руку',
+          true
+        );
+
+      };
+
+
+    arVideo.onerror =
+      () => {
+
+        statusAr(
+          'Відео не вдалося відкрити'
+        );
+
+      };
+
+  }
+
+
+  else if(type === 'audio'){
+
+    domCard.innerHTML = `
+
+      <div class="mediaLabel">
+        AR AUDIO
+      </div>
+
+      <h3>
+        Аудіо готове
+      </h3>
+
+      <p>
+        Запустіть аудіо на AR-картці.
+      </p>
+
+      <audio
+        id="arAudio"
+        class="audioProgress"
+        controls
+        preload="metadata"
+        src="${esc(src)}"
+      ></audio>
+
+    `;
+
+
+    domCard
+      .querySelector('#arAudio')
+      .addEventListener(
+        'canplay',
+        () => {
+
+          mediaReady =
+            true;
+
+        }
+      );
+
+  }
+
+
+  else if(type === 'link'){
+
+    domCard.innerHTML = `
+
+      <div class="mediaLabel">
+        AR LINK
+      </div>
+
+      <h3>
+        Навчальний ресурс
+      </h3>
+
+      <p>
+        Відкрийте ресурс у новій вкладці.
+      </p>
+
+      <button
+        class="action"
+        id="openResource"
+        type="button"
+      >
+        ВІДКРИТИ РЕСУРС
+      </button>
+
+    `;
+
+
+    domCard
+      .querySelector(
+        '#openResource'
+      )
+      .addEventListener(
+        'click',
+        () => {
+
+          window.open(
+            src,
+            '_blank',
+            'noopener,noreferrer'
+          );
+
+        }
+      );
+
+    mediaReady =
+      true;
+
+  }
+
+}
+
+
+/* =========================================================
+   THREE
+========================================================= */
+
+function initThree(){
+
+  if(renderer)
+    return;
+
+
+  scene =
+    new THREE.Scene();
+
+
+  cam3 =
+    new THREE.PerspectiveCamera(
+      45,
+      innerWidth /
+      innerHeight,
+      .1,
+      100
+    );
+
+
+  cam3.position.z =
+    3.2;
+
+
+  renderer =
+    new THREE.WebGLRenderer({
+
+      canvas:gl,
+
+      alpha:true,
+
+      antialias:true,
+
+      powerPreference:
+        'high-performance'
+
+    });
+
+
+  renderer.setPixelRatio(
+    Math.min(
+      window.devicePixelRatio || 1,
+      1.5
+    )
+  );
+
+
+  renderer.setSize(
+    innerWidth,
+    innerHeight
+  );
+
+
+  const geometry =
+    new THREE.BufferGeometry();
+
+
+  const points =
+    [];
+
+
+  for(
+    let i=0;
+    i<28;
+    i++
+  ){
+
+    points.push(
+
+      (Math.random()-.5)*1.8,
+
+      (Math.random()-.5)*1.2,
+
+      (Math.random()-.5)*.3
+
+    );
+
+  }
+
+
+  geometry.setAttribute(
+    'position',
+    new THREE.Float32BufferAttribute(
+      points,
+      3
+    )
+  );
+
+
+  particles =
+    new THREE.Points(
+
+      geometry,
+
+      new THREE.PointsMaterial({
+
+        color:0xa78bfa,
+
+        size:.025,
+
+        transparent:true,
+
+        opacity:.8
+
+      })
+
+    );
+
+
+  scene.add(
+    particles
+  );
+
+}
+
+
+/* =========================================================
+   RESIZE
+========================================================= */
+
+function resizeAR(){
+
+  if(
+    !cam3 ||
+    !renderer
+  )
+    return;
+
+
+  cam3.aspect =
+    innerWidth /
+    innerHeight;
+
+
+  cam3.updateProjectionMatrix();
+
+
+  renderer.setPixelRatio(
+    Math.min(
+      window.devicePixelRatio || 1,
+      1.5
+    )
+  );
+
+
+  renderer.setSize(
+    innerWidth,
+    innerHeight,
+    false
+  );
+
+
+  /*
+   * Після зміни орієнтації гаджета
+   * AR-контент повертається в адаптивну область.
+   */
+
+  if(
+    arContentVisible &&
+    stable > 0
+  ){
+
+    positionMedia(
+      .5,
+      .5
+    );
+
+  }
+
+}
+
+
+window.addEventListener(
+  'resize',
+  resizeAR
+);
+
+
+window.addEventListener(
+  'orientationchange',
+  () => {
+
+    setTimeout(
+      resizeAR,
+      250
+    );
+
+  }
+);
+
+
+/* =========================================================
+   MEDIAPIPE HAND TRACKING
+========================================================= */
+
+async function initHands(){
+
+  setLoad(
+    20,
+    'Завантажую розпізнавання руки…'
+  );
+
+
+  try{
+
+    const {
+      FilesetResolver,
+      HandLandmarker
+    } =
+      await import(
+        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/+esm'
+      );
+
+
+    const vision =
+      await FilesetResolver
+        .forVisionTasks(
+          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm'
+        );
+
+
+    handLandmarker =
+      await HandLandmarker
+        .createFromOptions(
+          vision,
+          {
+
+            baseOptions:{
+
+              modelAssetPath:
+                'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+
+              delegate:'CPU'
+
+            },
+
+            runningMode:'VIDEO',
+
+            numHands:1
+
+          }
+        );
+
+
+    gestureReady =
+      true;
+
+
+    setLoad(
+      55,
+      'Розпізнавання руки готове'
+    );
+
+
+  }catch(error){
+
+    console.warn(
+      'Hand tracking unavailable:',
+      error
+    );
+
+
+    handLandmarker =
+      null;
+
+    gestureReady =
+      false;
+
+
+    setLoad(
+      55,
+      'Спрощений режим доступний'
+    );
+
+  }
+
+}
+
+
+/* =========================================================
+   CAMERA
+========================================================= */
+
+async function startCamera(){
+
+  if(
+    !navigator.mediaDevices ||
+    !navigator.mediaDevices.getUserMedia
+  ){
+
+    statusAr(
+      'Цей браузер не підтримує доступ до камери'
+    );
+
+    return false;
+
+  }
+
+
+  if(mediaStream){
+
+    mediaStream
+      .getTracks()
+      .forEach(
+        track =>
+          track.stop()
+      );
+
+  }
+
+
+  try{
+
+    mediaStream =
+      await navigator
+        .mediaDevices
+        .getUserMedia({
+
+          video:{
+
+            facingMode:{
+              ideal:facingMode
+            },
+
+            width:{
+              ideal:1280
+            },
+
+            height:{
+              ideal:720
+            },
+
+            aspectRatio:{
+              ideal:
+                innerWidth /
+                innerHeight
             }
-        `,
-        fragmentShader: `
-            uniform sampler2D tex;
-            uniform vec3 keyColor;
-            uniform float similarity;
-            uniform float smoothness;
-            varying vec2 vUv;
-            void main() {
-                vec4 videoColor = texture2D(tex, vUv);
-                float Y1 = 0.299 * keyColor.r + 0.587 * keyColor.g + 0.114 * keyColor.b;
-                float Cr1 = 0.701 * (keyColor.r - Y1);
-                float Cb1 = 0.886 * (keyColor.b - Y1);
-                
-                float Y2 = 0.299 * videoColor.r + 0.587 * videoColor.g + 0.114 * videoColor.b;
-                float Cr2 = 0.701 * (videoColor.r - Y2);
-                float Cb2 = 0.886 * (videoColor.b - Y2);
-                
-                float blend = smoothstep(similarity, similarity + smoothness, distance(vec2(Cr1, Cb1), vec2(Cr2, Cb2)));
-                gl_FragColor = vec4(videoColor.rgb, videoColor.a * blend);
-            }
-        `,
-        transparent: true,
-        side: THREE.DoubleSide
-    });
-}
 
-async function loadARMedia() {
-    pb.style.width = '50%';
-    const src = queryParams.src;
-    const isVideo = src.match(/\.(mp4|webm|mov)($|\?)/i);
+          },
 
-    if (isVideo) {
-        videoElement = document.createElement('video');
-        videoElement.src = src;
-        videoElement.crossOrigin = 'anonymous';
-        videoElement.loop = true;
-        videoElement.muted = true;
-        videoElement.playsInline = true;
-        
-        await new Promise((resolve) => {
-            videoElement.oncanplay = resolve;
-            videoElement.load();
+          audio:false
+
         });
 
-        mediaTexture = new THREE.VideoTexture(videoElement);
-        const aspect = videoElement.videoWidth / videoElement.videoHeight || 1.33;
-        const geometry = new THREE.PlaneGeometry(0.8 * aspect, 0.8);
-        
-        const material = queryParams.chroma 
-            ? createChromaShaderMaterial(mediaTexture)
-            : new THREE.MeshBasicMaterial({ map: mediaTexture, transparent: true, side: THREE.DoubleSide });
 
-        arMesh = new THREE.Mesh(geometry, material);
-        arMesh.visible = false; 
-        scene.add(arMesh);
+    camera.srcObject =
+      mediaStream;
 
-        const playPromise = videoElement.play();
-        if (playPromise !== undefined) {
-            playPromise.catch(() => {
-                const overlay = document.getElementById('autoplay-overlay');
-                overlay.classList.add('visible');
-                document.getElementById('autoplay-btn').onclick = () => {
-                    videoElement.muted = false;
-                    videoElement.play();
-                    overlay.classList.remove('visible');
-                };
-            });
+
+    await camera.play();
+
+
+    camera.style.transform =
+      facingMode === 'user'
+        ? 'scaleX(-1)'
+        : 'scaleX(1)';
+
+
+    return true;
+
+
+  }catch(error){
+
+    console.warn(
+      'Camera error:',
+      error
+    );
+
+
+    statusAr(
+      'Немає доступу до камери. Перевірте дозвіл браузера.'
+    );
+
+
+    return false;
+
+  }
+
+}
+
+
+/* =========================================================
+   ADAPTIVE CONTENT POSITION
+========================================================= */
+
+function positionMedia(
+  x,
+  y
+){
+
+  /*
+   * x/y приходять з MediaPipe
+   * у діапазоні 0...1.
+   *
+   * Ми не прив'язуємо контент
+   * до конкретної роздільної здатності.
+   */
+
+  const isLandscape =
+    innerWidth >
+    innerHeight;
+
+
+  const horizontalRange =
+    isLandscape
+      ? 42
+      : 34;
+
+
+  const verticalRange =
+    isLandscape
+      ? 30
+      : 34;
+
+
+  const px =
+    (.5 - x) *
+    horizontalRange;
+
+
+  const py =
+    (y - .5) *
+    verticalRange;
+
+
+  const left =
+    Math.max(
+      12,
+      Math.min(
+        88,
+        50 + px
+      )
+    );
+
+
+  const top =
+    Math.max(
+      22,
+      Math.min(
+        75,
+        50 + py
+      )
+    );
+
+
+  [
+    arImage,
+    arGif,
+    arVideo,
+    domCard
+  ].forEach(
+    element => {
+
+      if(
+        element.style.display !==
+        'none'
+      ){
+
+        element.style.left =
+          `${left}%`;
+
+        element.style.top =
+          `${top}%`;
+
+      }
+
+    }
+  );
+
+}
+
+
+/* =========================================================
+   SHOW CONTENT
+========================================================= */
+
+function showContent(){
+
+  tap.style.display =
+    'none';
+
+
+  arContentVisible =
+    true;
+
+
+  if(
+    arActiveType ===
+    'video'
+  ){
+
+    arVideo.style.display =
+      'block';
+
+
+    const promise =
+      arVideo.play();
+
+
+    if(promise){
+
+      promise.catch(
+        () => {
+
+          tap.style.display =
+            'flex';
+
+          statusAr(
+            'Натисніть «Запустити» для відтворення'
+          );
+
         }
-    } else {
-        const loader = new THREE.TextureLoader();
-        loader.load(src, (tex) => {
-            const aspect = tex.image.width / tex.image.height || 1;
-            const geometry = new THREE.PlaneGeometry(0.8 * aspect, 0.8);
-            const material = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide });
-            arMesh = new THREE.Mesh(geometry, material);
-            arMesh.visible = false;
-            scene.add(arMesh);
-        });
+      );
+
     }
-    pb.style.width = '80%';
+
+  }
+
+
+  else if(
+    arActiveType === 'audio' ||
+    arActiveType === 'link'
+  ){
+
+    domCard.style.display =
+      'block';
+
+  }
+
+
+  else if(
+    arActiveType === 'image'
+  ){
+
+    arImage.style.display =
+      'block';
+
+  }
+
+
+  else if(
+    arActiveType === 'gif'
+  ){
+
+    arGif.style.display =
+      'block';
+
+  }
+
 }
 
-// MediaPipe Hand Tracking
-async function setupHandTracking() {
-    const video = document.getElementById('video');
 
-    const hands = new Hands({
-        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-    });
+/* =========================================================
+   HAND DETECTION
+========================================================= */
 
-    hands.setOptions({
-        maxNumHands: 1,
-        modelComplexity: 1,
-        minDetectionConfidence: 0.6,
-        minTrackingConfidence: 0.6
-    });
+function detect(){
 
-    hands.onResults((results) => {
-        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-            const landmarks = results.multiHandLandmarks[0];
-            
-            // Центр долоні (за точками 0, 5, 17)
-            const palmX = (landmarks[0].x + landmarks[5].x + landmarks[17].x) / 3;
-            const palmY = (landmarks[0].y + landmarks[5].y + landmarks[17].y) / 3;
-            const palmZ = (landmarks[0].z + landmarks[5].z + landmarks[17].z) / 3;
+  if(
+    ar.style.display !==
+    'block'
+  ){
 
-            // Конвертація з екранних координат у 3D-простір Three.js
-            const x3D = (0.5 - palmX) * 2.2; 
-            const y3D = (0.5 - palmY) * 2.2;
-            const z3D = -palmZ * 2.0;
+    return;
 
-            if (arMesh) {
-                arMesh.position.set(x3D, y3D, z3D);
-                arMesh.visible = true;
-            }
+  }
 
-            handTrackingActive = true;
-            debugInfo.innerHTML = `<span class="status-dot" style="background:var(--good);"></span>🖐️ Руку виявлено в AR`;
-        } else {
-            if (arMesh) arMesh.visible = false;
-            handTrackingActive = false;
-            debugInfo.innerHTML = `<span class="status-dot" style="background:var(--warn);"></span>Шукаю долоню...`;
+
+  if(
+    !gestureReady ||
+    !handLandmarker ||
+    camera.readyState < 2
+  ){
+
+    requestAnimationFrame(
+      detect
+    );
+
+    return;
+
+  }
+
+
+  const now =
+    performance.now();
+
+
+  if(
+    now -
+    lastDetect >
+    80
+  ){
+
+    lastDetect =
+      now;
+
+
+    try{
+
+      const result =
+        handLandmarker
+          .detectForVideo(
+            camera,
+            now
+          );
+
+
+      if(
+        result.landmarks &&
+        result.landmarks.length
+      ){
+
+        const landmarks =
+          result.landmarks[0];
+
+
+        const x =
+          (
+            landmarks[0].x +
+            landmarks[9].x
+          ) / 2;
+
+
+        const y =
+          (
+            landmarks[0].y +
+            landmarks[9].y
+          ) / 2;
+
+
+        stable =
+          Math.min(
+            10,
+            stable + 1
+          );
+
+
+        positionMedia(
+          x,
+          y
+        );
+
+
+        if(
+          stable >= 2
+        ){
+
+          showContent();
+
+
+          statusAr(
+            'AR-контент активний',
+            true
+          );
+
         }
-    });
 
-    cameraUtilsInstance = new Camera(video, {
-        onFrame: async () => {
-            await hands.send({ image: video });
-        },
-        width: 1280,
-        height: 720,
-        facingMode: currentFacingMode
-    });
+      }else{
 
-    await cameraUtilsInstance.start();
-    pb.style.width = '100%';
-    setTimeout(() => { loadingEl.style.display = 'none'; }, 300);
+        stable =
+          0;
+
+
+        /*
+         * Не ховаємо вже активований
+         * контент миттєво, щоб на телефоні
+         * не було мерехтіння.
+         */
+
+        if(!arContentVisible){
+
+          statusAr(
+            'Покажіть руку перед камерою'
+          );
+
+        }
+
+      }
+
+    }catch(error){
+
+      console.warn(
+        'Detection error:',
+        error
+      );
+
+
+      statusAr(
+        'Розпізнавання руки тимчасово недоступне'
+      );
+
+    }
+
+  }
+
+
+  requestAnimationFrame(
+    detect
+  );
+
 }
 
-function render() {
-    requestAnimationFrame(render);
-    if (arMesh && arMesh.visible) {
-        const time = performance.now() * 0.002;
-        arMesh.position.y += Math.sin(time) * 0.005; // Легкий ефект ширяння над долонею
-    }
-    renderer.render(scene, camera);
+
+/* =========================================================
+   THREE ANIMATION
+========================================================= */
+
+function animate(){
+
+  animationId =
+    requestAnimationFrame(
+      animate
+    );
+
+
+  if(particles){
+
+    const time =
+      performance.now() /
+      1000;
+
+
+    particles.rotation.y =
+      time * .25;
+
+
+    particles.rotation.x =
+      Math.sin(
+        time * .5
+      ) * .08;
+
+  }
+
+
+  if(
+    renderer &&
+    scene &&
+    cam3
+  ){
+
+    renderer.render(
+      scene,
+      cam3
+    );
+
+  }
+
 }
 
-document.getElementById('camera-toggle').addEventListener('click', async () => {
-    currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
-    if (cameraUtilsInstance) {
-        await cameraUtilsInstance.stop();
-        await setupHandTracking();
+
+/* =========================================================
+   START AR
+========================================================= */
+
+async function startAR(
+  type,
+  src,
+  chroma
+){
+
+  setup.style.display =
+    'none';
+
+  ar.style.display =
+    'block';
+
+  loading.style.display =
+    'flex';
+
+  tap.style.display =
+    'none';
+
+
+  setLoad(
+    5,
+    'Підготовка…'
+  );
+
+
+  setupMedia(
+    type,
+    src,
+    chroma
+  );
+
+
+  initThree();
+
+
+  setLoad(
+    15,
+    'Підключаю камеру…'
+  );
+
+
+  const cameraOK =
+    await startCamera();
+
+
+  if(!cameraOK){
+
+    loading.style.display =
+      'none';
+
+    tap.style.display =
+      'flex';
+
+    return;
+
+  }
+
+
+  await initHands();
+
+
+  setLoad(
+    75,
+    'Готую AR-сцену…'
+  );
+
+
+  await new Promise(
+    resolve =>
+      setTimeout(
+        resolve,
+        250
+      )
+  );
+
+
+  setLoad(
+    100,
+    'Готово'
+  );
+
+
+  loading.style.display =
+    'none';
+
+
+  if(gestureReady){
+
+    statusAr(
+      'Покажіть руку перед камерою'
+    );
+
+  }else{
+
+    statusAr(
+      'Спрощений режим: натисніть «Запустити»'
+    );
+
+    tap.style.display =
+      'flex';
+
+  }
+
+
+  if(!animationId)
+    animate();
+
+
+  if(gestureReady)
+    detect();
+
+}
+
+
+/* =========================================================
+   CAMERA SWITCH
+========================================================= */
+
+$('switchCam')
+  .addEventListener(
+    'click',
+    async () => {
+
+      facingMode =
+        facingMode === 'environment'
+          ? 'user'
+          : 'environment';
+
+
+      await startCamera();
+
     }
-});
+  );
 
-document.getElementById('reset-btn').addEventListener('click', () => {
-    window.location.href = window.location.pathname;
-});
 
-// Запуск пайплайну
-(async function start() {
-    initThree();
-    await loadARMedia();
-    await setupHandTracking();
-    render();
-})();
+/* =========================================================
+   EXIT AR
+========================================================= */
+
+$('exitAr')
+  .addEventListener(
+    'click',
+    () => {
+
+      if(mediaStream){
+
+        mediaStream
+          .getTracks()
+          .forEach(
+            track =>
+              track.stop()
+          );
+
+        mediaStream =
+          null;
+
+      }
+
+
+      cancelAnimationFrame(
+        animationId
+      );
+
+      animationId =
+        0;
+
+
+      clearMedia();
+
+
+      ar.style.display =
+        'none';
+
+      setup.style.display =
+        'flex';
+
+
+      /*
+       * Повертаємо URL до чистого index.html,
+       * щоб повторне створення AR не отримувало
+       * старий deep-link.
+       */
+
+      history.pushState(
+        {},
+        '',
+        location.pathname
+      );
+
+      setSelectedType(
+        'video'
+      );
+
+    }
+  );
+
+
+/* =========================================================
+   TAP FALLBACK
+========================================================= */
+
+tapBtn
+  .addEventListener(
+    'click',
+    () => {
+
+      showContent();
+
+      statusAr(
+        'AR-контент активний',
+        true
+      );
+
+    }
+  );
+
+
+/* =========================================================
+   PAGEHIDE
+========================================================= */
+
+window.addEventListener(
+  'pagehide',
+  () => {
+
+    if(mediaStream){
+
+      mediaStream
+        .getTracks()
+        .forEach(
+          track =>
+            track.stop()
+        );
+
+    }
+
+  }
+);
+
+
+/* =========================================================
+   VISIBILITY
+========================================================= */
+
+document.addEventListener(
+  'visibilitychange',
+  () => {
+
+    if(
+      document.hidden &&
+      mediaStream
+    ){
+
+      /*
+       * Не закриваємо AR,
+       * але припиняємо відео,
+       * щоб браузер не витрачав
+       * ресурси у фоні.
+       */
+
+      try{
+        arVideo.pause();
+      }catch{}
+
+    }
+
+  }
+);
+
+
+/* =========================================================
+   DEEP LINK
+========================================================= */
+
+const params =
+  new URLSearchParams(
+    location.search
+  );
+
+
+const deepType =
+  params.get('type');
+
+
+const deepSrc =
+  cleanUrl(
+    params.get('src')
+  );
+
+
+if(
+  deepType &&
+  deepSrc &&
+  [
+    'video',
+    'image',
+    'gif',
+    'audio',
+    'link'
+  ].includes(
+    deepType
+  )
+){
+
+  startAR(
+    deepType,
+    deepSrc,
+    params.get('chroma') !== '0'
+  );
+
+}else{
+
+  setSelectedType(
+    'video'
+  );
+
+}
+
+
+/* =========================================================
+   PREVENT ACCIDENTAL DOUBLE TAP / ZOOM
+========================================================= */
+
+document.addEventListener(
+  'dblclick',
+  event => {
+
+    if(
+      ar.style.display ===
+      'block'
+    ){
+
+      event.preventDefault();
+
+    }
+
+  },
+  {
+    passive:false
+  }
+);
+
+
+/* =========================================================
+   KEYBOARD ACCESSIBILITY
+========================================================= */
+
+document.addEventListener(
+  'keydown',
+  event => {
+
+    if(
+      event.key === 'Escape' &&
+      ar.style.display === 'block'
+    ){
+
+      $('exitAr').click();
+
+    }
+
+  }
+);
+
+
+/* =========================================================
+   INITIAL UI
+========================================================= */
+
+setSelectedType(
+  'video'
+);
+
 </script>
+
 </body>
 </html>
